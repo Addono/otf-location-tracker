@@ -1,4 +1,7 @@
+import java.util.Properties
+
 import com.vividsolutions.jts.geom.{Coordinate, GeometryFactory, Point}
+import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord}
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark.SparkConf
 import org.apache.spark.api.java.JavaPairRDD
@@ -21,23 +24,32 @@ object Test {
     streamingContext.sparkContext.setLogLevel("WARN")
 
     // Configure Kafka
-    val kafkaParams = Map[String, Object](
-      "bootstrap.servers" -> "localhost:9092",
+    val sharedKafkaConfig = Map[String, Object](
+      "bootstrap.servers" -> "localhost:9092"
+    )
+
+    val kafkaConsumerProperties = Map[String, Object](
       "key.deserializer" -> classOf[StringDeserializer],
       "value.deserializer" -> classOf[StringDeserializer],
       "group.id" -> "testid",
       "auto.offset.reset" -> "latest",
       "enable.auto.commit" -> (false: java.lang.Boolean)
-    )
+    ) ++ sharedKafkaConfig
 
     val topics = Array("topicA")
     val stream = KafkaUtils.createDirectStream[String, String](
       streamingContext,
       PreferConsistent,
-      Subscribe[String, String](topics, kafkaParams)
+      Subscribe[String, String](topics, kafkaConsumerProperties)
     )
 
     val geoFactory: GeometryFactory = new GeometryFactory()
+
+    // Kafka producer configuration
+    val kafkaProducerProperties = new Properties()
+    sharedKafkaConfig.foreach { case (key, value) => kafkaProducerProperties.put(key, value)}
+    kafkaProducerProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
+    kafkaProducerProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
 
     stream.foreachRDD { rdd =>
       val points: RDD[Point] = rdd.map(_.value().split(",")) // split the input string by commas
@@ -51,7 +63,13 @@ object Test {
 
         val joinedPoints = geoSpatialJoin(pointRDD)
 
-        joinedPoints.collect().foreach { println }
+        joinedPoints
+          .map { case (id1, id2, distance) => new ProducerRecord[String, String]("result", null, "%s,%s,%s".format(id1, id2, distance))}
+          .foreachPartition { records =>
+            val producer = new KafkaProducer[String, String](kafkaProducerProperties);
+
+            records.foreach { producer.send }
+          }
       }
     }
 
