@@ -14,7 +14,7 @@ import org.datasyslab.geospark.enums.GridType
 import org.datasyslab.geospark.spatialOperator.JoinQuery
 import org.datasyslab.geospark.spatialRDD.{CircleRDD, PointRDD}
 
-object Test {
+object Main {
   def main(args: Array[String]): Unit = {
 
     // Setup Spark configuration
