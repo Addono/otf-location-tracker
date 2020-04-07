@@ -47,31 +47,37 @@ object Main {
 
     // Kafka producer configuration
     val kafkaProducerProperties = new Properties()
-    sharedKafkaConfig.foreach { case (key, value) => kafkaProducerProperties.put(key, value)}
+    sharedKafkaConfig.foreach { case (key, value) => kafkaProducerProperties.put(key, value) }
     kafkaProducerProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
     kafkaProducerProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
 
-    stream.foreachRDD { rdd =>
-      val points: RDD[Point] = rdd.map(_.value().split(",")) // split the input string by commas
-        .map(v => v(0).toFloat -> v(1).toFloat -> v(2))
-        .map { case ((x, y), id) => new Coordinate(x, y) -> id }
-        .map { case (coordinate, id) => geoFactory.createPoint(coordinate) -> id }
-        .map { case (point, id) => point.setUserData(id); point }
+    stream
+      .map(_.value().split(",")) // split the input string by commas
+      .map(v => v(0).toFloat -> v(1).toFloat -> v(2))
+      .map { case ((x, y), id) => new Coordinate(x, y) -> id }
+      .map { case (coordinate, id) => geoFactory.createPoint(coordinate) -> id }
+      .map { case (point, id) => point.setUserData(id); point }
+      .foreachRDD { rdd: RDD[Point] =>
+        // Repartition in case of sparse partitions
+        val points = if (rdd.getNumPartitions > rdd.count) rdd.repartition(1) else rdd
 
-      if (points.count() > 1) {
-        val pointRDD = new PointRDD(points)
+        if (points.count() > 1) {
+          val pointRDD = new PointRDD(points)
+          val joinedPoints = geoSpatialJoin(pointRDD)
 
-        val joinedPoints = geoSpatialJoin(pointRDD)
+          joinedPoints
+            // Format each point found in the geospatial join such that it can be published to Kafka
+            .map { case (id1, id2, distance) => new ProducerRecord[String, String]("result", null, "%s,%s,%s".format(id1, id2, distance)) }
+            // Publish all messages to Kafka
+            .foreachPartition { records =>
+              val producer = new KafkaProducer[String, String](kafkaProducerProperties);
 
-        joinedPoints
-          .map { case (id1, id2, distance) => new ProducerRecord[String, String]("result", null, "%s,%s,%s".format(id1, id2, distance))}
-          .foreachPartition { records =>
-            val producer = new KafkaProducer[String, String](kafkaProducerProperties);
-
-            records.foreach { producer.send }
-          }
+              records.foreach {
+                producer.send
+              }
+            }
+        }
       }
-    }
 
     // Start the computation
     streamingContext.start()
@@ -83,7 +89,7 @@ object Main {
   def geoSpatialJoin(pointRDD: PointRDD): RDD[(AnyRef, AnyRef, Double)] = {
     pointRDD.analyze()
 
-    val circleRDD = new CircleRDD(pointRDD, 0.1)  // Set the boundary to 0.1 radian
+    val circleRDD = new CircleRDD(pointRDD, 0.1) // Set the boundary to 0.1 radian
     circleRDD.analyze()
     circleRDD.spatialPartitioning(GridType.KDBTREE)
 
@@ -101,6 +107,6 @@ object Main {
     // Filter out self-matches and compute the distance between points
     result
       .filter { case (from, to) => from.getUserData != to.getUserData } // Filter out all self-matches
-      .map{ case (from, to) => (from.getUserData, to.getUserData, from.distance(to))} // Compute the distance between all points
+      .map { case (from, to) => (from.getUserData, to.getUserData, from.distance(to)) } // Compute the distance between all points
   }
 }
