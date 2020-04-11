@@ -10,7 +10,7 @@ First, make sure that there's a Kafka instance running locally, this can be achi
 docker-compose up
 ```
 
-Then, start the `src/main/scala/Main` class. This project uses Java 1.8, newer versions will not be compatible with the used Spark version.
+Then, start the `src/main/scala/ContactTracker` class. This project uses Java 1.8, newer versions will not be compatible with the used Spark version.
 
 To play around with it, open two shells, one running:
 
