@@ -15,7 +15,7 @@ Then, start the `src/main/scala/Main` class. This project uses Java 1.8, newer v
 To play around with it, open two shells, one running:
 
 ```bash
-kafka-console-consumer --bootstrap-server localhost:9092 --topic result
+kafka-console-consumer --bootstrap-server localhost:9092 --topic contacts
 ```
 
 And another one running:

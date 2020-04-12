@@ -18,7 +18,7 @@ object Main {
   def main(args: Array[String]): Unit = {
 
     // Setup Spark configuration
-    val conf = new SparkConf().setAppName("whatever").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("contact-tracker").setMaster("local[*]")
     val streamingContext = new StreamingContext(conf, Seconds(1))
 
     streamingContext.sparkContext.setLogLevel("WARN")
@@ -31,7 +31,7 @@ object Main {
     val kafkaConsumerProperties = Map[String, Object](
       "key.deserializer" -> classOf[StringDeserializer],
       "value.deserializer" -> classOf[StringDeserializer],
-      "group.id" -> "testid",
+      "group.id" -> "contact-tracker",
       "auto.offset.reset" -> "latest",
       "enable.auto.commit" -> (false: java.lang.Boolean)
     ) ++ sharedKafkaConfig
@@ -67,7 +67,7 @@ object Main {
 
           joinedPoints
             // Format each point found in the geospatial join such that it can be published to Kafka
-            .map { case (id1, id2, distance) => new ProducerRecord[String, String]("result", null, "%s,%s,%s".format(id1, id2, distance)) }
+            .map { case (id1, id2, distance) => new ProducerRecord[String, String]("contacts", null, "%s,%s,%s".format(id1, id2, distance)) }
             // Publish all messages to Kafka
             .foreachPartition { records =>
               val producer = new KafkaProducer[String, String](kafkaProducerProperties);
@@ -82,8 +82,6 @@ object Main {
     // Start the computation
     streamingContext.start()
     streamingContext.awaitTermination()
-
-    println("Finished")
   }
 
   def geoSpatialJoin(pointRDD: PointRDD): RDD[(AnyRef, AnyRef, Double)] = {
