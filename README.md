@@ -4,7 +4,7 @@
 
 ## Usage
 
-First, make sure that there's a Kafka instance running locally, this can be achieved by running:
+First, make sure there's a Kafka instance running locally, this can be achieved by running:
 
 ```bash
 docker-compose up
@@ -42,4 +42,4 @@ bar,hotel,0.066232283462637
 restaurant,gas,0.0462561402323107
 ```
 
-In some cases, less events will be outputted, as it might be that your input was processed in two seperate batches. Currently, this is likely to happen, as the batch size is set to 1 second. Future versions with larger batch sizes should make this less significant.
+In some cases, fewer events will be outputted, as it might be that your input was processed in two seperate batches. Currently, this is likely to happen, as the batch size is set to 1 second. Future versions with larger batch sizes should make this less significant.
